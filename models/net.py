@@ -564,33 +564,48 @@ class DeformableConv2d(nn.Module):
         return x
 
 
-def ssh_conv_bn(inp, oup, stride = 1, leaky = 0):
-    return nn.Sequential(
-        DeformableConv2d(inp, oup, 3, stride, 1, bias=False),
-        nn.BatchNorm2d(oup),
-        nn.LeakyReLU(negative_slope=leaky, inplace=True)
-    )
+def ssh_conv_bn(inp, oup, stride = 1, leaky = 0, onnx_export=False):
+    if onnx_export:
+        # Use regular Conv2d for ONNX compatibility
+        return nn.Sequential(
+            nn.Conv2d(inp, oup, 3, stride, 1, bias=False),
+            nn.BatchNorm2d(oup),
+            nn.LeakyReLU(negative_slope=leaky, inplace=True)
+        )
+    else:
+        return nn.Sequential(
+            DeformableConv2d(inp, oup, 3, stride, 1, bias=False),
+            nn.BatchNorm2d(oup),
+            nn.LeakyReLU(negative_slope=leaky, inplace=True)
+        )
 
-def ssh_conv_bn_no_relu(inp, oup, stride):
-    return nn.Sequential(
-        DeformableConv2d(inp, oup, 3, stride, 1, bias=False),
-        nn.BatchNorm2d(oup),
-    )
+def ssh_conv_bn_no_relu(inp, oup, stride, onnx_export=False):
+    if onnx_export:
+        # Use regular Conv2d for ONNX compatibility
+        return nn.Sequential(
+            nn.Conv2d(inp, oup, 3, stride, 1, bias=False),
+            nn.BatchNorm2d(oup),
+        )
+    else:
+        return nn.Sequential(
+            DeformableConv2d(inp, oup, 3, stride, 1, bias=False),
+            nn.BatchNorm2d(oup),
+        )
 
 class SSH(nn.Module):
-    def __init__(self, in_channel, out_channel):
+    def __init__(self, in_channel, out_channel, onnx_export=False):
         super(SSH, self).__init__()
         assert out_channel % 4 == 0
         leaky = 0
         if (out_channel <= 64):
             leaky = 0.1
-        self.conv3X3 = ssh_conv_bn_no_relu(in_channel, out_channel//2, stride=1)
+        self.conv3X3 = ssh_conv_bn_no_relu(in_channel, out_channel//2, stride=1, onnx_export=onnx_export)
 
-        self.conv5X5_1 = ssh_conv_bn(in_channel, out_channel//4, stride=1, leaky = leaky)
-        self.conv5X5_2 = ssh_conv_bn_no_relu(out_channel//4, out_channel//4, stride=1)
+        self.conv5X5_1 = ssh_conv_bn(in_channel, out_channel//4, stride=1, leaky = leaky, onnx_export=onnx_export)
+        self.conv5X5_2 = ssh_conv_bn_no_relu(out_channel//4, out_channel//4, stride=1, onnx_export=onnx_export)
 
-        self.conv7X7_2 = ssh_conv_bn(out_channel//4, out_channel//4, stride=1, leaky = leaky)
-        self.conv7x7_3 = ssh_conv_bn_no_relu(out_channel//4, out_channel//4, stride=1)
+        self.conv7X7_2 = ssh_conv_bn(out_channel//4, out_channel//4, stride=1, leaky = leaky, onnx_export=onnx_export)
+        self.conv7x7_3 = ssh_conv_bn_no_relu(out_channel//4, out_channel//4, stride=1, onnx_export=onnx_export)
 
     def forward(self, input):
         conv3X3 = self.conv3X3(input)
