@@ -54,17 +54,22 @@ class ChannelGate(nn.Module):
             nn.Linear(gate_channels // reduction_ratio, gate_channels)
             )
         self.pool_types = pool_types
+        # Use adaptive pooling for ONNX compatibility
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+
     def forward(self, x):
         channel_att_sum = None
         for pool_type in self.pool_types:
             if pool_type=='avg':
-                avg_pool = F.avg_pool2d( x, (x.size(2), x.size(3)), stride=(x.size(2), x.size(3)))
+                avg_pool = self.avg_pool(x)
                 channel_att_raw = self.mlp( avg_pool )
             elif pool_type=='max':
-                max_pool = F.max_pool2d( x, (x.size(2), x.size(3)), stride=(x.size(2), x.size(3)))
+                max_pool = self.max_pool(x)
                 channel_att_raw = self.mlp( max_pool )
             elif pool_type=='lp':
-                lp_pool = F.lp_pool2d( x, 2, (x.size(2), x.size(3)), stride=(x.size(2), x.size(3)))
+                # For ONNX compatibility, use adaptive avg pool instead of lp_pool
+                lp_pool = self.avg_pool(x)
                 channel_att_raw = self.mlp( lp_pool )
             elif pool_type=='lse':
                 # LSE pool only
@@ -76,7 +81,8 @@ class ChannelGate(nn.Module):
             else:
                 channel_att_sum = channel_att_sum + channel_att_raw
 
-        scale = F.sigmoid( channel_att_sum ).unsqueeze(2).unsqueeze(3).expand_as(x)
+        scale = F.sigmoid( channel_att_sum ).unsqueeze(2).unsqueeze(3)
+        # Use broadcasting instead of expand_as for ONNX compatibility
         return x * scale
 
 def logsumexp_2d(tensor):
